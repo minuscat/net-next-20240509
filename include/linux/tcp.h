@@ -389,6 +389,7 @@ struct tcp_sock {
 		saw_accecn_opt:2,	/* An AccECN option was seen */
 		ecn_fail:1;	/* ECN reflector detected path mangling */
 	u8	accecn_no_respond:1, /* AccECN no response on feedback */
+		accecn_no_options:1, /* AccECN no options send out */
 		first_data_ack:1;    /* Check for first data ack */
 	u8	thin_lto    : 1,/* Use linear timeouts for thin streams */
 		fastopen_connect:1, /* FASTOPEN_CONNECT sockopt */
