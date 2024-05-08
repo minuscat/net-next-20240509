@@ -388,6 +388,7 @@ struct tcp_sock {
 		syn_ect_rcv:2,	/* ... needed durign 3WHS + first seqno */
 		saw_accecn_opt:2,	/* An AccECN option was seen */
 		ecn_fail:1;	/* ECN reflector detected path mangling */
+	u8	accecn_no_respond:1; /* AccECN no response on feedback */
 	u8	thin_lto    : 1,/* Use linear timeouts for thin streams */
 		fastopen_connect:1, /* FASTOPEN_CONNECT sockopt */
 		fastopen_no_cookie:1, /* Allow send/recv SYN+data without a cookie */
