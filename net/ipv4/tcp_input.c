@@ -5088,6 +5088,9 @@ static void tcp_rcv_spurious_retrans(struct sock *sk, const struct sk_buff *skb)
 	/* Save last flowlabel after a spurious retrans. */
 	tcp_save_lrcv_flowlabel(sk, skb);
 #endif
+	if (TCP_SKB_CB(skb)->seq == tcp_sk(sk)->duplicate_sack[0].start_seq)
+		if (tcp_ecn_mode_accecn(tcp_sk(sk)) && tcp_sk(sk)->accecn_opt_sent)
+			tcp_accecn_fail_mode_set(tcp_sk(sk), TCP_ACCECN_OPT_FAIL_SEND);
 }
 
 static void tcp_send_dupack(struct sock *sk, const struct sk_buff *skb)
