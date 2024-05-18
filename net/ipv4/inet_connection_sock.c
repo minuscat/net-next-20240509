@@ -903,6 +903,7 @@ static void syn_ack_recalc(struct request_sock *req,
 
 int inet_rtx_syn_ack(const struct sock *parent, struct request_sock *req)
 {
+	req->is_rtx = 1;
 	int err = req->rsk_ops->rtx_syn_ack(parent, req);
 
 	if (!err)
@@ -936,6 +937,7 @@ reqsk_alloc_noprof(const struct request_sock_ops *ops, struct sock *sk_listener,
 	req->syncookie = 0;
 	req->timeout = 0;
 	req->num_timeout = 0;
+	req->is_rtx = 0;
 	req->num_retrans = 0;
 	req->sk = NULL;
 	refcount_set(&req->rsk_refcnt, 0);
