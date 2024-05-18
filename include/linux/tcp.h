@@ -390,7 +390,8 @@ struct tcp_sock {
 		syn_ect_rcv:2,	/* ... needed durign 3WHS + first seqno */
 		wait_third_ack:1; /* Need 3rd ack in simultaneous ope nfor AccECN */
 	u8	accecn_fail_mode:4,     /* AccECN failure handling */
-		saw_accecn_opt:2;	/* An AccECN option was seen */
+		saw_accecn_opt:2,	/* An AccECN option was seen */
+		first_data_ack:1;	/* Check for first data ack */
 	u8	thin_lto    : 1,/* Use linear timeouts for thin streams */
 		fastopen_connect:1, /* FASTOPEN_CONNECT sockopt */
 		fastopen_no_cookie:1, /* Allow send/recv SYN+data without a cookie */
