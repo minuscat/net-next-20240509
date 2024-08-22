@@ -6,21 +6,20 @@
  * as DualPI2, CurvyRED, or even fq_codel with a low ce_threshold for the
  * L4S flows.
  *
- * This is similar to DCTCP, albeit aimed to be used over the public
- * internet over paths supporting the L4S codepoint---ECT(1), and thus
- * implements the safety requirements listed in Appendix A of:
- * https://tools.ietf.org/html/draft-ietf-tsvwg-ecn-l4s-id-08#page-23
+ * It has evolved from DCTCP, and adapted to for use over the public
+ * internet, and thus needs to implements the performance and safety 
+ * requirements listed in Appendix A of IETF RFC9331:
+ * https://datatracker.ietf.org/doc/html/rfc9331
  *
  * Notable changes from DCTCP:
  *
  * 1/ RTT independence:
- * prague will operate in a given RTT region as if it was experiencing a target
- * RTT (default=10ms), while preserving the responsiveness it is able to
- * achieve due to its base RTT (i.e., quick reaction to sudden congestion
- * increase). This enable short RTT flows to co-exist with long RTT ones (e.g.,
- * intra-DC flows competing vs internet traffic) without causing starvation or
- * saturating the ECN signal, without the need for Diffserv/bandwdith
- * reservation.
+ * Below a minimum target RTT, Prague will operate as if it was experiencing
+ * that target RTT (default=25ms). This enable short RTT flows to co-exist
+ * with long RTT ones (e.g., Edge-DC flows competing vs intercontinental 
+ * internet traffic) without causing starvation or saturating the ECN signal,
+ * without the need for Diffserv/bandwdith reservation. It also makes the 
+ * lower RTT flows more resilient to the inertia of higher RTT flows.
  *
  * This is achieved by scaling cwnd growth during Additive Increase, thus
  * leaving room for higher RTT flows to grab a larger bandwidth share while at
@@ -29,8 +28,8 @@
  *
  * Given that this slows short RTT flows, this behavior only makes sense for
  * long-running flows that actually need to share the link--as opposed to,
- * e.g., RPC traffic. To that end, flows progressively become more RTT
- * independent as they grow "older".
+ * e.g., RPC traffic. To that end, flows become RTT independent after
+ * DEFAULT_RTT_TRANSITION number of RTTs after slowstart (default = 4).
  *
  * 2/ Updated EWMA:
  * The resolution of alpha has been increased to ensure that a low amount of
@@ -42,35 +41,75 @@
  * updates (similarly to how tp->srtt_us is maintained, as opposed to
  * dctcp->alpha).
  *
- * 3/ Updated cwnd management code
- * In order to operate with a permanent, (very) low, marking probability, the
- * arithmetic around cwnd has been updated to track its decimals alongside its
- * integer part. This both improve the precision, avoiding avalanche effects as
- * remainders are carried over the next operation, as well as responsiveness as
+ * 3/ Updated integer arithmetics and fixed point scaling
+ * In order to operate with a permanent, (very) low, marking probability and
+ * much larger RTT range, the arithmetics have been updated to track decimal
+ * precision with unbiased rounding, alongside avoiding capping the integer
+ * parts. This improves the precision, avoiding avalanche effects as 
+ * remainders are carried over next operations, as well as responsiveness as
  * the AQM at the bottleneck can effectively control the operation of the flow
  * without drastic marking probability increase.
  *
- * Finally, when deriving the cwnd reduction from alpha, we ensure that the
- * computed value is unbiased wrt. integer rounding.
- *
- * 4/ Additive Increase uses unsaturated marking
- * Given that L4S AQM may induce randomly applied CE marks (e.g., from the PI2
+ * 4/ Only Additive Increase for ACK of non marked packets 
+ * DCTCP disabled increase for a full RTT when marks were received. Given that
+ * L4S AQM may induce CE marks applied every ACK (e.g., from the PI2
  * part of dualpi2), instead of full RTTs of marks once in a while that a step
- * AQM would cause, cwnd is updated for every ACK, regardless of the congestion
- * status of the connection (i.e., it is expected to spent most of its time in
- * TCP_CA_CWR when used over dualpi2).
- *
- * To ensure that it can operate properly in environment where the marking level
- * is close to saturation, its increase also unsature the marking, i.e., the
- * total increase over a RTT is proportional to (1-p)/p.
+ * AQM would cause, Prague will increase every RTT, but proportional to the
+ * non-marked packets. So the total increase over an RTT is proportional to
+ * (1-p)/p. The cwnd is updated for every ACK that reports non-marked
+ * data on the receiver, regardless of the congestion status of the connection
+ * (i.e., it is expected to spent most of its time in TCP_CA_CWR when used
+ * over dualpi2). Note that this is only valid for CE marks. For loss (so
+ * being in TCP_CA_LOSS state) the increase is still disabled for one RTT.
  *
  * See https://arxiv.org/abs/1904.07605 for more details around saturation.
  *
  * 5/ Pacing/tso sizing
- * prague aims to keep queuing delay as low as possible. To that end, it is in
+ * Prague aims to keep queuing delay as low as possible. To that end, it is in
  * its best interest to pace outgoing segments (i.e., to smooth its traffic),
  * as well as impose a maximal GSO burst size to avoid instantaneous queue
- * buildups in the bottleneck link.
+ * buildups in the bottleneck link. The current GSO burst size is limited to
+ * create up to 250us latency assuming the current transmission rate is the
+ * bottleneck rate.
+ * 
+ * 6/ Pacing below minimum congestion window of 2
+ * Prague will further reduce the pacing rate based on a fractional window
+ * below 2 MTUs. This is needed for very low RTT networks to be able to
+ * control flows to low rates without the need for the NW to buffer the 2
+ * packets per active flow. The rate can go down to 100kbps on any RTT.
+ * below 1Mbps, the packet MTU will be reduced to make sure we still can
+ * send 2 packets per 25ms, down to 150 bytes at 100kbps.
+ * The real blocking congestion window will still be 2, but as long as ACKs
+ * come in, the pacing rate will block the sending. The fractional window
+ * is also always rounded up to the next integer when assigned to the
+ * blocking congestion window. This makes the pacing rate most of the time
+ * the blocking mechanism. As the fractional window is updated every ACK,
+ * the pacing rate is smoothly increased guaranteeing a non-stepwise rate
+ * increase when the window has a low integer value.
+ *
+ * 7/ +/- 3% pacing variations per RTT 
+ * The first half of every RTT (or 25ms if it is less) the pacing rate is
+ * increase with 3%, the second half it is decrease with 3%. This triggers
+ * a stable amount of marks every RTT on a STEP marking AQM when the link
+ * is very stable. It avoids the undesired on/off marking scheme of DCTCP
+ * (one RTT of 100% marks and several RTTs no marks) which causes larger
+ * rate variations and rate and RTT unfairness due to its different
+ * rate to marking probability proportionality:
+ *     r ~ 1/p^2
+ *
+ * All above improvements make Prague behave under 25ms very rate fair and
+ * RTT independent, and assures full or close to full link utilization on
+ * a stable network link. The resulting rate equation is very close to:
+ *     r [Mbps] = 1/p - 1
+ * or typically the other way around that a flow needs p marking probability
+ * to get squeezed down to r Mbps:
+ *     p = 1 / (r + 1)
+ * So 50% (p = 0.5) will result in a rate of 1Mbps or typically the other
+ * way around: 1Mbps needs 50% marks, 99Mbps needs 1% marks, 100kbps needs
+ * 91% marks, etc...
+ * For an RTT above 25ms, a correction factor should be taken into account:
+ *     r [Mbps] = (1/p - 1) * 25ms / RTT
+ * with RTT and 25ms expressed in the same unit.
  */
 
 #define pr_fmt(fmt) "TCP-Prague " fmt
