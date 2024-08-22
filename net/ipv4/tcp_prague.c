@@ -115,7 +115,10 @@
  *
  * All above improvements make Prague behave under 25ms very rate fair and
  * RTT independent, and assures full or close to full link utilization on
- * a stable network link. The resulting rate equation is very close to:
+ * a stable network link. It allows the NW to control the rate down to
+ * 100kbps without the need to drop packets or built a queue. For RTTs
+ * from 0us till 25ms and link rates higher than 100kbps, the resulting
+ * rate equation is very close to:
  *     r [Mbps] = 1/p - 1
  * or typically the other way around that a flow needs p marking probability
  * to get squeezed down to r Mbps:
@@ -123,7 +126,7 @@
  * So 50% (p = 0.5) will result in a rate of 1Mbps or typically the other
  * way around: 1Mbps needs 50% marks, 99Mbps needs 1% marks, 100kbps needs
  * 91% marks, etc...
- * For an RTT above 25ms, a correction factor should be taken into account:
+ * For RTTs above 25ms, a correction factor should be taken into account:
  *     r [Mbps] = (1/p - 1) * 25ms / RTT
  * with RTT and 25ms expressed in the same unit.
  */
