@@ -31,7 +31,11 @@
  * e.g., RPC traffic. To that end, flows become RTT independent after
  * DEFAULT_RTT_TRANSITION number of RTTs after slowstart (default = 4).
  *
- * 2/ Updated EWMA:
+ * 2/ Fractional window and increased alpha resolution:
+ * To support slower and more gradual increase of the window, a fractional
+ * window is kept and manipulated from which the socket congestion window is
+ * derived (rounded up to the next integer and capped to at least 2).
+ *
  * The resolution of alpha has been increased to ensure that a low amount of
  * marks over high-BDP paths can be accurately taken into account in the
  * computation.
@@ -75,19 +79,19 @@
  * Note this is the "fq" qdisc, not the default "fq_codel" qdisc.
  * 
  * 6/ Pacing below minimum congestion window of 2
- * Prague will further reduce the pacing rate based on a fractional window
+ * Prague will further reduce the pacing rate based on the fractional window
  * below 2 MTUs. This is needed for very low RTT networks to be able to
  * control flows to low rates without the need for the NW to buffer the 2
- * packets per active flow. The rate can go down to 100kbps on any RTT.
- * below 1Mbps, the packet MTU will be reduced to make sure we still can
- * send 2 packets per 25ms, down to 150 bytes at 100kbps.
+ * packets in flight per active flow. The rate can go down to 100kbps on
+ * any RTT. Below 1Mbps, the packet MTU will be reduced to make sure we
+ * still can send 2 packets per 25ms, down to 150 bytes at 100kbps.
  * The real blocking congestion window will still be 2, but as long as ACKs
  * come in, the pacing rate will block the sending. The fractional window
  * is also always rounded up to the next integer when assigned to the
  * blocking congestion window. This makes the pacing rate most of the time
  * the blocking mechanism. As the fractional window is updated every ACK,
  * the pacing rate is smoothly increased guaranteeing a non-stepwise rate
- * increase when the window has a low integer value.
+ * increase when the socket congestion window has a low integer value.
  *
  * 7/ +/- 3% pacing variations per RTT 
  * The first half of every RTT (or 25ms if it is less) the pacing rate is
