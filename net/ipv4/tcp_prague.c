@@ -6,9 +6,11 @@
  * as DualPI2, CurvyRED, or even fq_codel with a low ce_threshold for the
  * L4S flows.
  *
- * It has evolved from DCTCP, and adapted to for use over the public
- * internet, and thus needs to implements the performance and safety 
- * requirements listed in Appendix A of IETF RFC9331:
+ * TCP-Prague evolved from DCTCP, adapted for the use over the public
+ * internet and removing all reasons why the NW would need to build a queue
+ * in a bottleneck link to control the rate of this congestion-control.
+ * As such, it needs to implement the performance and safety requirements
+ * listed in Appendix A of IETF RFC9331:
  * https://datatracker.ietf.org/doc/html/rfc9331
  *
  * Notable changes from DCTCP:
