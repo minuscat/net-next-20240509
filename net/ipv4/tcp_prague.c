@@ -70,7 +70,9 @@
  * as well as impose a maximal GSO burst size to avoid instantaneous queue
  * buildups in the bottleneck link. The current GSO burst size is limited to
  * create up to 250us latency assuming the current transmission rate is the
- * bottleneck rate.
+ * bottleneck rate. For this functionality to be active, the "fq" qdisc needs
+ * to be active on the NW interfaces that need to carry Prague flows.
+ * Note this is the "fq" qdisc, not the default "fq_codel" qdisc.
  * 
  * 6/ Pacing below minimum congestion window of 2
  * Prague will further reduce the pacing rate based on a fractional window
@@ -96,6 +98,14 @@
  * rate variations and rate and RTT unfairness due to its different
  * rate to marking probability proportionality:
  *     r ~ 1/p^2
+ *
+ * 8/ Enforce the use of ECT_1, Accurate ECN and ECN++
+ * As per RFC 9331, Prague needs to use ECT_1, Accurate ECN and ECN++
+ * (also ECT_1 on non-data packets like SYN, pure ACKs, ...). Independent
+ * of the other sysctl configs of the kernel, setting the Prague CC on a
+ * socket will cause the system-wide configuration being overruled. This
+ * also means that using Prague selectively on a system does not require
+ * any system-wide changes (except using the FQ qdisc on the NICs).
  *
  * All above improvements make Prague behave under 25ms very rate fair and
  * RTT independent, and assures full or close to full link utilization on
